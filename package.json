@@ -1,0 +1,11 @@
+{
+  "name": "coarena-keys",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node getkeys.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.57.0"
+  }
+}

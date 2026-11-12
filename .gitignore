@@ -1,0 +1,7 @@
+node_modules/
+keys.csv
+accounts.csv
+accounts.txt
+states/
+*.log
+.env
