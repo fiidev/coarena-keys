@@ -1,79 +1,126 @@
 # coarena-keys
 
-Ambil API key [coarena.ai](https://coarena.ai) dari banyak akun Google tanpa login satu per satu.
+Ambil API key [coarena.ai](https://coarena.ai) dari banyak akun Google secara otomatis tanpa perlu login satu per satu secara manual.
 
-Script membuka **Zen asli dengan profil asli** (yang sudah login Google), lalu untuk tiap email: login coarena lewat Google, pilih akun itu, buat key, logout dari coarena. Akun yang tidak login di Zen di-skip.
+Mendukung **Windows**, **macOS**, dan **Linux** untuk berbagai browser:
+- **Zen Browser / Firefox** (langsung pakai profil utama tanpa perlu clone/setup)
+- **Chromium Family**: Google Chrome, Brave, Microsoft Edge, Chromium, Vivaldi
 
-Tidak ada cookie yang disalin atau disimpan ke disk, jadi Google tidak melihat "perangkat baru" dan sesi Zen tidak ke-logout.
+---
 
-## Syarat
+## 📋 Syarat
 
-- Node.js 20+
-- Browser yang didukung (Zen, Chrome, Brave, Edge, Chromium, Vivaldi) di **Linux, macOS, atau Windows**.
-- Sudah login akun Google yang mau dipakai
-- **Browser ditutup** saat script jalan (profil hanya bisa dipakai satu proses)
+1. **Node.js 20+** terpasang di komputermu ([unduh Node.js](https://nodejs.org/)).
+2. Browser yang didukung (sudah terpasang dan sudah login ke akun Google).
+3. **PENTING: Browser harus DITUTUP** sebelum menjalankan script agar file database/cookie tidak terkunci.
 
+---
+
+## 🚀 Panduan Cepat (Semua OS)
+
+### 1. Install Dependency
+Buka terminal (Terminal di Mac/Linux, atau Command Prompt / PowerShell di Windows):
 ```bash
 npm install
 ```
 
-## Pemakaian
-
-`accounts.txt` berisi satu email per baris.
-
-```bash
-# cek login saja, tidak membuat key
-node getkeys.mjs --check
-
-# buat key, tampilkan token di layar
-node getkeys.mjs --print
+### 2. Siapkan Daftar Akun
+Buat file `accounts.txt` di folder project ini, lalu isi dengan email akun Google-mu (satu email per baris):
+```text
+emailpertama@gmail.com
+emailkedua@gmail.com
+emailketiga@gmail.com
 ```
 
-### Opsi
+### 3. Jalankan Script Sesuai Browser
+
+#### A. Jika Memakai Chrome / Brave / Edge (Chromium Family)
+Karena Chrome memiliki sistem keamanan baru, ada dua cara:
+
+* **Cara 1: Pakai Login yang Sudah Ada di Browser (Rekomendasi)**
+  1. Pastikan browser sudah ditutup rapat.
+  2. Salin profil dan cek koneksi:
+     ```bash
+     node getkeys.mjs --browser chrome --copy-default --check
+     ```
+  3. Cetak dan simpan API Key:
+     ```bash
+     node getkeys.mjs --browser chrome --print
+     ```
+
+* **Cara 2: Setup Profil Khusus (Jika cara 1 tidak mendeteksi akun)**
+  1. Buka jendela setup khusus:
+     ```bash
+     node getkeys.mjs --browser chrome --setup
+     ```
+  2. Login ke akun-akun Google-mu di jendela browser yang terbuka, lalu **tutup** browsernya.
+  3. Cetak API Key:
+     ```bash
+     node getkeys.mjs --browser chrome --print
+     ```
+
+#### B. Jika Memakai Zen Browser / Firefox
+Tutup Zen/Firefox, lalu langsung jalankan:
+```bash
+# Cek akun yang aktif
+node getkeys.mjs --browser zen --check
+
+# Cetak dan simpan API Key
+node getkeys.mjs --browser zen --print
+```
+
+---
+
+## 💻 Panduan Khusus per Sistem Operasi
+
+Script ini sudah dibuat 100% otomatis mendeteksi lokasi file dan browser di masing-masing OS:
+
+### 🪟 Windows
+- **Terminal:** Gunakan PowerShell, Windows Terminal, atau Command Prompt (CMD).
+- **Deteksi Browser Otomatis:**
+  - Chrome: `C:\Program Files\Google\Chrome\Application\chrome.exe` atau `%LOCALAPPDATA%`
+  - Edge: `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`
+  - Brave: `C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe`
+  - Zen: `C:\Program Files\Zen Browser\zen.exe`
+- **Profil Default:** Dibaca otomatis dari `%LOCALAPPDATA%` (Chrome/Edge/Brave) dan `%APPDATA%\zen` (Zen).
+
+### 🍎 macOS
+- **Terminal:** Gunakan Terminal bawaan atau iTerm2.
+- **Deteksi Browser Otomatis:**
+  - Chrome: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+  - Brave: `/Applications/Brave Browser.app/Contents/MacOS/Brave Browser`
+  - Edge: `/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge`
+  - Zen: `/Applications/Zen Browser.app/Contents/MacOS/zen-bin`
+- **Profil Default:** Dibaca otomatis dari `~/Library/Application Support/`.
+
+### 🐧 Linux
+- **Terminal:** Bash, Zsh, dll.
+- **Deteksi Browser Otomatis:** Otomatis mencari di `$PATH`, `/usr/bin/`, dan `/opt/`.
+- **Profil Default:** Dibaca otomatis dari `~/.config/`.
+
+---
+
+## ⚙️ Daftar Opsi Lengkap
 
 | Opsi | Keterangan |
 | --- | --- |
-| `--browser <nama>` | `zen` (default), `firefox`, `chrome`, `chromium`, `brave`, `edge`, `vivaldi`. |
-| `--copy-default` | Chromium family: salin profil default browser (yang sudah login Google) ke profil khusus. Browser harus ditutup. |
-| `--setup` | Chromium family: buka profil khusus untuk login Google manual. |
-| `--profile <dir>` | Folder profil. Default Zen: `~/.config/zen/installs.ini`. Default Chromium: `~/.config/coarena-keys/<browser>`. |
-| `--profile-dir <nama>` | Chromium family: nama folder profil tertentu (misal `Profile 3`). Otomatis terdeteksi dari email jika ada di `Local State`. |
-| `--browser-path <exe>` | Path binary browser. Zen bisa juga lewat env `ZEN_PATH`. |
-| `--only <email>` | Proses satu akun saja. |
-| `--check` | Login dan cek jumlah key aktif, tanpa membuat key. |
-| `--force` | Buat key baru walau sudah punya key aktif (maksimal 10 per akun). |
-| `--print` | Tampilkan token di terminal. |
-| `--out <file>` | File CSV hasil (default `keys.csv`). |
+| `--browser <nama>` | Pilihan browser: `zen` (default), `chrome`, `brave`, `edge`, `chromium`, `vivaldi`, `firefox`. |
+| `--copy-default` | Salin data profil bawaan browser ke folder kerja tools ini. (Browser wajib ditutup). |
+| `--setup` | Membuka jendela browser khusus tanpa otomasi untuk login Google manual sekali saja. |
+| `--only <email>` | Hanya proses satu akun email tertentu, contoh: `--only user@gmail.com`. |
+| `--check` | Cek status login dan jumlah key yang aktif tanpa membuat key baru. |
+| `--print` | Tampilkan token API key langsung di terminal. |
+| `--force` | Tetap buat key baru meskipun akun sudah memiliki key aktif (maks 10 key per akun). |
+| `--profile-dir <nama>` | Pilih profil tertentu secara manual (misal `Profile 3`). Otomatis terdeteksi jika tidak diisi. |
+| `--browser-path <path>` | Tentukan lokasi executable browser secara manual jika terpasang di lokasi non-standar. |
+| `--out <file>` | Nama file CSV hasil penyimpanan (default: `keys.csv`). |
 
-## Format hasil
+---
 
-`keys.csv`:
+## 📄 Format Hasil (`keys.csv`)
 
-```
+File `keys.csv` akan otomatis dibuat/ditambahkan dengan format:
+```csv
 email,key_id,token,expires_at,status
 ```
-
-Token hanya ditampilkan sekali oleh server. Simpan file ini baik-baik.
-
-## Keamanan
-
-Jangan commit `keys.csv` dan `accounts.txt` (sudah ada di `.gitignore`).
-
-## Catatan
-
-- Memakai endpoint privat coarena, bukan API resmi. Bentuk respons bisa berubah kapan saja.
-- Batas per akun: 10 key aktif.
-- Akun coarena yang sedang login di browser dikembalikan di akhir, jadi tidak ke-logout.
-
-## Chromium family (Chrome, Brave, Edge, Chromium, Vivaldi)
-
-Chrome 136+ memblokir otomasi di profil utama, jadi pakai profil khusus (sekali setup):
-
-```bash
-# atau pakai login yang sudah ada di profil default (browser ditutup):
-node getkeys.mjs --browser brave --copy-default --check
-
-node getkeys.mjs --browser brave --setup   # login semua akun Google, lalu tutup browsernya
-node getkeys.mjs --browser brave --print
-```
-- Riwayat kunjungan ke coarena ikut tercatat di Zen.
+*Catatan: Token hanya diberikan satu kali oleh server CoArena. File `keys.csv` dan `accounts.txt` sudah dimasukkan ke `.gitignore` agar tidak bocor ke publik.*
