@@ -33,6 +33,7 @@ node getkeys.mjs --print
 | Opsi | Keterangan |
 | --- | --- |
 | `--browser <nama>` | `zen` (default), `firefox`, `chrome`, `chromium`, `brave`, `edge`, `vivaldi`. |
+| `--copy-default` | Chromium family: salin profil default browser (yang sudah login Google) ke profil khusus. Browser harus ditutup. |
 | `--setup` | Chromium family: buka profil khusus untuk login Google manual. |
 | `--profile <dir>` | Folder profil. Default Zen: `~/.config/zen/installs.ini`. Default Chromium: `~/.config/coarena-keys/<browser>`. |
 | `--browser-path <exe>` | Path binary browser. Zen bisa juga lewat env `ZEN_PATH`. |
@@ -67,6 +68,9 @@ Jangan commit `keys.csv` dan `accounts.txt` (sudah ada di `.gitignore`).
 Chrome 136+ memblokir otomasi di profil utama, jadi pakai profil khusus (sekali setup):
 
 ```bash
+# atau pakai login yang sudah ada di profil default (browser ditutup):
+node getkeys.mjs --browser brave --copy-default --check
+
 node getkeys.mjs --browser brave --setup   # login semua akun Google, lalu tutup browsernya
 node getkeys.mjs --browser brave --print
 ```

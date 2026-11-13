@@ -25,6 +25,17 @@ const CHROMIUM = {
 const isChromium = BROWSER in CHROMIUM;
 if (!isChromium && BROWSER !== 'zen' && BROWSER !== 'firefox') die('--browser harus zen, firefox, ' + Object.keys(CHROMIUM).join(', '));
 
+const DEFAULT_DIR = { chrome: 'google-chrome', chromium: 'chromium', brave: 'BraveSoftware/Brave-Browser', edge: 'microsoft-edge', vivaldi: 'vivaldi' };
+const SKIP = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'ShaderCache', 'GrShaderCache', 'Crashpad', 'component_crx_cache', 'Safe Browsing']);
+
+function copyDefault(profile) {
+  const src = path.join(os.homedir(), '.config', DEFAULT_DIR[BROWSER]);
+  if (!fs.existsSync(src)) die('profil default tidak ketemu: ' + src);
+  fs.rmSync(profile, { recursive: true, force: true });
+  fs.cpSync(src, profile, { recursive: true, filter: s => !SKIP.has(path.basename(s)) && !/^Singleton/.test(path.basename(s)) });
+  console.log(`profil default disalin: ${src} -> ${profile}`);
+}
+
 function findExe() {
   if (arg('browser-path')) return String(arg('browser-path'));
   if (!isChromium) return process.env.ZEN_PATH || '/opt/zen-browser-bin/zen-bin';
@@ -150,6 +161,10 @@ async function main() {
       : die('buat accounts.txt (satu email per baris) atau pakai --only <email>');
 
   if (!isChromium && zenRunning()) die('Zen masih jalan. Tutup dulu Zen-nya, lalu jalankan lagi.');
+  if (isChromium && has('copy-default')) {
+    try { execSync('pgrep -x ' + path.basename(exe).replace(/-stable$/, ''), { stdio: 'ignore' }); die('Browser masih jalan. Tutup dulu, lalu jalankan lagi.'); } catch {}
+    copyDefault(profile);
+  }
   if (isChromium && !fs.existsSync(profile)) die(`profil ${profile} belum ada. Jalankan dulu: node getkeys.mjs --browser ${BROWSER} --setup`);
   console.log(`browser=${BROWSER}\nprofile=${profile}\nout=${OUT}\n`);
 
