@@ -71,6 +71,22 @@ node getkeys.mjs --browser zen --print
 
 ---
 
+### 🛡️ Fitur Keamanan: Backup & Restore Sesi/Tabs Otomatis
+Sebelum script otomasi berjalan atau menyentuh profil browser apapun (Zen, Chrome, Brave, Edge, Firefox), script akan **otomatis mencadangkan (backup) seluruh tab, workspace, dan sesi** ke folder `~/.browser-backups/<browser>/<timestamp>`.
+
+Jika sewaktu-waktu jendela atau tab kamu tertutup / hilang, cukup pulihkan dengan 1 perintah:
+```bash
+# Untuk Zen Browser:
+node restore-session.mjs --browser zen
+# atau
+node getkeys.mjs --browser zen --restore
+
+# Untuk Chrome / Brave / Edge / Firefox:
+node restore-session.mjs --browser chrome
+```
+
+---
+
 ## 💻 Panduan Khusus per Sistem Operasi
 
 Script ini sudah dibuat 100% otomatis mendeteksi lokasi file dan browser di masing-masing OS:

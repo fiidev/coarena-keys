@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync, spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { backupBrowserSession, restoreBrowserSession } from './browser-backup.mjs';
 
 const arg = (n, d = null) => { const i = process.argv.indexOf('--' + n); return i > 0 ? (process.argv[i + 1] ?? true) : d; };
 const has = n => process.argv.includes('--' + n);
@@ -314,6 +315,23 @@ function launch(exe, profile, profileDir = null) {
 async function main() {
   const exe = findExe();
   const profile = resolveProfile();
+
+  if (has('restore')) {
+    console.log(`[restore] Memulihkan sesi & tabs untuk ${BROWSER} dari cadangan terakhir...`);
+    const res = restoreBrowserSession(BROWSER, profile);
+    if (!res.ok) die(`Gagal memulihkan sesi: ${res.error}`);
+    console.log(`[restore] ✅ Berhasil! Sesi & tab dipulihkan dari: ${res.selectedBackup}`);
+    console.log(`          Item dipulihkan: ${res.restoredItems.join(', ')}`);
+    console.log(`\nSilakan buka browser ${BROWSER} kamu kembali.`);
+    return;
+  }
+
+  // Backup otomatis sesi & tab sebelum proses otomasi
+  const backupRes = backupBrowserSession(BROWSER, profile);
+  if (backupRes.ok) {
+    console.log(`[backup] ✅ Cadangan sesi & tab ${BROWSER} aman tersimpan di:`);
+    console.log(`         ${backupRes.backupDir} (${backupRes.filesCount} item)\n`);
+  }
 
   // Buka browser biasa (tanpa otomasi) di profil khusus supaya login Google tidak diblokir.
   if (has('setup')) {
