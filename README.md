@@ -36,6 +36,7 @@ node getkeys.mjs --print
 | `--copy-default` | Chromium family: salin profil default browser (yang sudah login Google) ke profil khusus. Browser harus ditutup. |
 | `--setup` | Chromium family: buka profil khusus untuk login Google manual. |
 | `--profile <dir>` | Folder profil. Default Zen: `~/.config/zen/installs.ini`. Default Chromium: `~/.config/coarena-keys/<browser>`. |
+| `--profile-dir <nama>` | Chromium family: nama folder profil tertentu (misal `Profile 3`). Otomatis terdeteksi dari email jika ada di `Local State`. |
 | `--browser-path <exe>` | Path binary browser. Zen bisa juga lewat env `ZEN_PATH`. |
 | `--only <email>` | Proses satu akun saja. |
 | `--check` | Login dan cek jumlah key aktif, tanpa membuat key. |

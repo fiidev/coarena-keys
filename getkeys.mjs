@@ -36,6 +36,21 @@ function copyDefault(profile) {
   console.log(`profil default disalin: ${src} -> ${profile}`);
 }
 
+function findProfileDir(userDataDir, email) {
+  try {
+    const lsPath = path.join(userDataDir, 'Local State');
+    if (!fs.existsSync(lsPath)) return null;
+    const ls = JSON.parse(fs.readFileSync(lsPath, 'utf8'));
+    const cache = ls.profile?.info_cache || {};
+    for (const [dir, info] of Object.entries(cache)) {
+      if (info.user_name && info.user_name.toLowerCase() === email.toLowerCase()) {
+        return dir;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function findExe() {
   if (arg('browser-path')) return String(arg('browser-path'));
   if (!isChromium) return process.env.ZEN_PATH || '/opt/zen-browser-bin/zen-bin';
@@ -102,7 +117,7 @@ async function login(page, email) {
   }
 
   for (let i = 0; i < 10 && !page.url().startsWith('https://coarena.ai'); i++) {
-    const btn = await page.$('button ::-p-text(Continue), button ::-p-text(Lanjutkan), button ::-p-text(Allow), button ::-p-text(Izinkan)');
+    const btn = await page.$('button ::-p-text(Continue), button ::-p-text(Lanjutkan), button ::-p-text(Allow), button ::-p-text(Izinkan), [role=button] ::-p-text(Continue), [role=button] ::-p-text(Lanjutkan)');
     if (btn) await btn.click().catch(() => {});
     await sleep(2000);
   }
@@ -133,11 +148,13 @@ async function processAccount(page, email, tag) {
   return ok ? 'ok' : 'key invalid';
 }
 
-function launch(exe, profile) {
+function launch(exe, profile, profileDir = null) {
   if (!isChromium) return puppeteer.launch({ browser: 'firefox', executablePath: exe, userDataDir: profile, headless: false, defaultViewport: null });
+  const args = ['--disable-blink-features=AutomationControlled'];
+  if (profileDir) args.push('--profile-directory=' + profileDir);
   return puppeteer.launch({
     browser: 'chrome', executablePath: exe, userDataDir: profile, headless: false, defaultViewport: null,
-    ignoreDefaultArgs: ['--enable-automation'], args: ['--disable-blink-features=AutomationControlled'],
+    ignoreDefaultArgs: ['--enable-automation'], args,
   });
 }
 
@@ -170,32 +187,66 @@ async function main() {
 
   const restore = guardProfile(profile);
   process.on('SIGINT', () => { restore(); process.exit(130); });
-  const browser = await launch(exe, profile);
+
   const rows = [];
-  try {
-    const page = (await browser.pages())[0] ?? await browser.newPage();
-    await page.goto('https://coarena.ai/account/api');
-    const original = await emailOnPage(page);
-    if (original) console.log(`akun coarena aktif sekarang: ${original} (dikembalikan di akhir)\n`);
+  if (!isChromium) {
+    const browser = await launch(exe, profile);
+    try {
+      const page = (await browser.pages())[0] ?? await browser.newPage();
+      await page.goto('https://coarena.ai/account/api');
+      const original = await emailOnPage(page);
+      if (original) console.log(`akun coarena aktif sekarang: ${original} (dikembalikan di akhir)\n`);
 
-    for (let i = 0; i < emails.length; i++) {
-      const email = emails[i];
-      const tag = `[${i + 1}/${emails.length}] ${email}`;
-      try {
-        const res = await login(page, email);
-        if (res !== 'ok') { console.log(`${tag}  ${res}`); rows.push([email, res]); continue; }
-        rows.push([email, await processAccount(page, email, tag)]);
-      } catch (e) {
-        console.log(`${tag}  error: ${String(e.message).slice(0, 100)}`);
-        rows.push([email, 'error']);
+      for (let i = 0; i < emails.length; i++) {
+        const email = emails[i];
+        const tag = `[${i + 1}/${emails.length}] ${email}`;
+        try {
+          const res = await login(page, email);
+          if (res !== 'ok') { console.log(`${tag}  ${res}`); rows.push([email, res]); continue; }
+          rows.push([email, await processAccount(page, email, tag)]);
+        } catch (e) {
+          console.log(`${tag}  error: ${String(e.message).slice(0, 100)}`);
+          rows.push([email, 'error']);
+        }
       }
-    }
 
-    if (original) console.log(`\nbalik ke ${original}: ${await login(page, original).catch(e => 'error ' + e.message)}`);
-    else await coarenaLogout(page).catch(() => {});
-  } finally {
-    await browser.close().catch(() => {});
-    restore();
+      if (original) console.log(`\nbalik ke ${original}: ${await login(page, original).catch(e => 'error ' + e.message)}`);
+      else await coarenaLogout(page).catch(() => {});
+    } finally {
+      await browser.close().catch(() => {});
+      restore();
+    }
+  } else {
+    let currentBrowser = null;
+    let currentProfDir = null;
+    let page = null;
+    try {
+      for (let i = 0; i < emails.length; i++) {
+        const email = emails[i];
+        const tag = `[${i + 1}/${emails.length}] ${email}`;
+        const profDir = arg('profile-dir') || findProfileDir(profile, email) || 'Default';
+
+        if (!currentBrowser || currentProfDir !== profDir) {
+          if (currentBrowser) await currentBrowser.close().catch(() => {});
+          currentProfDir = profDir;
+          console.log(`[${profDir}] membuka browser...`);
+          currentBrowser = await launch(exe, profile, profDir);
+          page = (await currentBrowser.pages())[0] ?? await currentBrowser.newPage();
+        }
+
+        try {
+          const res = await login(page, email);
+          if (res !== 'ok') { console.log(`${tag}  ${res}`); rows.push([email, res]); continue; }
+          rows.push([email, await processAccount(page, email, tag)]);
+        } catch (e) {
+          console.log(`${tag}  error: ${String(e.message).slice(0, 100)}`);
+          rows.push([email, 'error']);
+        }
+      }
+    } finally {
+      if (currentBrowser) await currentBrowser.close().catch(() => {});
+      restore();
+    }
   }
 
   console.log('\nringkasan:');
