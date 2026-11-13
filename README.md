@@ -9,8 +9,9 @@ Tidak ada cookie yang disalin atau disimpan ke disk, jadi Google tidak melihat "
 ## Syarat
 
 - Node.js 20+
-- Zen Browser (default `/opt/zen-browser-bin/zen-bin`), sudah login semua akun Google yang mau dipakai
-- **Zen ditutup** saat script jalan (profil hanya bisa dipakai satu proses)
+- Browser yang didukung (Zen, Chrome, Brave, Edge, Chromium, Vivaldi) di **Linux, macOS, atau Windows**.
+- Sudah login akun Google yang mau dipakai
+- **Browser ditutup** saat script jalan (profil hanya bisa dipakai satu proses)
 
 ```bash
 npm install

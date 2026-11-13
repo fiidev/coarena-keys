@@ -11,25 +11,88 @@ const arg = (n, d = null) => { const i = process.argv.indexOf('--' + n); return 
 const has = n => process.argv.includes('--' + n);
 const OUT = String(arg('out', 'keys.csv'));
 const BROWSER = String(arg('browser', 'zen'));
-const ZEN = path.join(os.homedir(), '.config/zen');
+const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const die = m => { console.error('ERROR: ' + m); process.exit(1); };
 
 const CHROMIUM = {
-  chrome: ['google-chrome-stable', 'google-chrome'],
+  chrome: ['google-chrome-stable', 'google-chrome', 'chrome'],
   chromium: ['chromium', 'chromium-browser'],
   brave: ['brave-browser', 'brave'],
-  edge: ['microsoft-edge-stable', 'microsoft-edge'],
+  edge: ['microsoft-edge-stable', 'microsoft-edge', 'msedge'],
   vivaldi: ['vivaldi-stable', 'vivaldi'],
 };
 const isChromium = BROWSER in CHROMIUM;
 if (!isChromium && BROWSER !== 'zen' && BROWSER !== 'firefox') die('--browser harus zen, firefox, ' + Object.keys(CHROMIUM).join(', '));
 
-const DEFAULT_DIR = { chrome: 'google-chrome', chromium: 'chromium', brave: 'BraveSoftware/Brave-Browser', edge: 'microsoft-edge', vivaldi: 'vivaldi' };
 const SKIP = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'ShaderCache', 'GrShaderCache', 'Crashpad', 'component_crx_cache', 'Safe Browsing']);
 
+function getZenDir() {
+  if (IS_MAC) return path.join(os.homedir(), 'Library/Application Support/zen');
+  if (IS_WIN) return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData/Roaming'), 'zen');
+  const p1 = path.join(os.homedir(), '.config/zen');
+  return fs.existsSync(p1) ? p1 : path.join(os.homedir(), '.zen');
+}
+
+function getAppConfigDir() {
+  if (IS_WIN) return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local'), 'coarena-keys');
+  return path.join(os.homedir(), '.config/coarena-keys');
+}
+
+function getDefaultBrowserDir(browser) {
+  if (IS_WIN) {
+    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local');
+    const map = {
+      chrome: 'Google/Chrome/User Data',
+      chromium: 'Chromium/User Data',
+      brave: 'BraveSoftware/Brave-Browser/User Data',
+      edge: 'Microsoft/Edge/User Data',
+      vivaldi: 'Vivaldi/User Data',
+    };
+    return path.join(local, map[browser] || browser);
+  }
+  if (IS_MAC) {
+    const appSupport = path.join(os.homedir(), 'Library/Application Support');
+    const map = {
+      chrome: 'Google/Chrome',
+      chromium: 'Chromium',
+      brave: 'BraveSoftware/Brave-Browser',
+      edge: 'Microsoft Edge',
+      vivaldi: 'Vivaldi',
+    };
+    return path.join(appSupport, map[browser] || browser);
+  }
+  const map = {
+    chrome: 'google-chrome',
+    chromium: 'chromium',
+    brave: 'BraveSoftware/Brave-Browser',
+    edge: 'microsoft-edge',
+    vivaldi: 'vivaldi',
+  };
+  return path.join(os.homedir(), '.config', map[browser] || browser);
+}
+
+function isProcessRunning(names) {
+  const list = (Array.isArray(names) ? names : [names]).map(n => n.toLowerCase());
+  if (IS_WIN) {
+    try {
+      const out = execSync('tasklist /NH /FO CSV', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().toLowerCase();
+      return list.some(n => out.includes(n.replace(/\.exe$/i, '') + '.exe') || out.includes(n));
+    } catch { return false; }
+  }
+  for (const n of list) {
+    try { execSync(`pgrep -f "${n}"`, { stdio: 'ignore' }); return true; } catch {}
+  }
+  return false;
+}
+
+function zenRunning() {
+  return isProcessRunning(['zen-bin', 'zen.exe', 'zen']);
+}
+
 function copyDefault(profile) {
-  const src = path.join(os.homedir(), '.config', DEFAULT_DIR[BROWSER]);
+  const src = getDefaultBrowserDir(BROWSER);
   if (!fs.existsSync(src)) die('profil default tidak ketemu: ' + src);
   fs.rmSync(profile, { recursive: true, force: true });
   fs.cpSync(src, profile, { recursive: true, filter: s => !SKIP.has(path.basename(s)) && !/^Singleton/.test(path.basename(s)) });
@@ -53,25 +116,115 @@ function findProfileDir(userDataDir, email) {
 
 function findExe() {
   if (arg('browser-path')) return String(arg('browser-path'));
-  if (!isChromium) return process.env.ZEN_PATH || '/opt/zen-browser-bin/zen-bin';
-  for (const n of CHROMIUM[BROWSER]) for (const d of (process.env.PATH || '').split(':')) {
-    const p = path.join(d, n);
-    if (fs.existsSync(p)) return p;
+  if (process.env.BROWSER_PATH) return process.env.BROWSER_PATH;
+
+  if (!isChromium) {
+    if (process.env.ZEN_PATH) return process.env.ZEN_PATH;
+    const candidates = [];
+    if (IS_MAC) {
+      candidates.push(
+        '/Applications/Zen Browser.app/Contents/MacOS/zen-bin',
+        '/Applications/Zen.app/Contents/MacOS/zen-bin',
+        '/Applications/Zen Browser.app/Contents/MacOS/zen',
+        path.join(os.homedir(), 'Applications/Zen Browser.app/Contents/MacOS/zen-bin')
+      );
+    } else if (IS_WIN) {
+      const pf = process.env.ProgramFiles || 'C:\\Program Files';
+      const local = process.env.LOCALAPPDATA || '';
+      candidates.push(
+        path.join(pf, 'Zen Browser', 'zen.exe'),
+        path.join(local, 'Zen Browser', 'zen.exe'),
+        path.join(pf, 'Zen', 'zen.exe')
+      );
+    } else {
+      candidates.push('/opt/zen-browser-bin/zen-bin', '/usr/bin/zen-browser', '/usr/bin/zen');
+    }
+    for (const c of candidates) if (c && fs.existsSync(c)) return c;
+    for (const d of (process.env.PATH || '').split(path.delimiter)) {
+      for (const name of ['zen-bin', 'zen', 'zen-browser', 'zen.exe']) {
+        const p = path.join(d, name);
+        if (fs.existsSync(p)) return p;
+      }
+    }
+    die('binary Zen tidak ketemu. Pakai --browser-path <exe> atau set ZEN_PATH.');
+  }
+
+  const candidates = [];
+  if (IS_MAC) {
+    const appMap = {
+      chrome: ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', path.join(os.homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome')],
+      chromium: ['/Applications/Chromium.app/Contents/MacOS/Chromium'],
+      brave: ['/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', path.join(os.homedir(), 'Applications/Brave Browser.app/Contents/MacOS/Brave Browser')],
+      edge: ['/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', path.join(os.homedir(), 'Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge')],
+      vivaldi: ['/Applications/Vivaldi.app/Contents/MacOS/Vivaldi'],
+    };
+    candidates.push(...(appMap[BROWSER] || []));
+  } else if (IS_WIN) {
+    const pf = process.env.ProgramFiles || 'C:\\Program Files';
+    const pfx86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const local = process.env.LOCALAPPDATA || '';
+    const winMap = {
+      chrome: [
+        path.join(pf, 'Google/Chrome/Application/chrome.exe'),
+        path.join(pfx86, 'Google/Chrome/Application/chrome.exe'),
+        path.join(local, 'Google/Chrome/Application/chrome.exe'),
+      ],
+      chromium: [
+        path.join(local, 'Chromium/Application/chrome.exe'),
+        path.join(pf, 'Chromium/Application/chrome.exe'),
+      ],
+      brave: [
+        path.join(pf, 'BraveSoftware/Brave-Browser/Application/brave.exe'),
+        path.join(local, 'BraveSoftware/Brave-Browser/Application/brave.exe'),
+      ],
+      edge: [
+        path.join(pfx86, 'Microsoft/Edge/Application/msedge.exe'),
+        path.join(pf, 'Microsoft/Edge/Application/msedge.exe'),
+      ],
+      vivaldi: [
+        path.join(local, 'Vivaldi/Application/vivaldi.exe'),
+        path.join(pf, 'Vivaldi/Application/vivaldi.exe'),
+      ],
+    };
+    candidates.push(...(winMap[BROWSER] || []));
+  } else {
+    const linuxMap = {
+      chrome: ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/chrome'],
+      chromium: ['/usr/bin/chromium', '/usr/bin/chromium-browser'],
+      brave: ['/usr/bin/brave-browser', '/usr/bin/brave'],
+      edge: ['/usr/bin/microsoft-edge-stable', '/usr/bin/microsoft-edge'],
+      vivaldi: ['/usr/bin/vivaldi-stable', '/usr/bin/vivaldi'],
+    };
+    candidates.push(...(linuxMap[BROWSER] || []));
+  }
+
+  for (const c of candidates) if (c && fs.existsSync(c)) return c;
+  for (const n of CHROMIUM[BROWSER]) for (const d of (process.env.PATH || '').split(path.delimiter)) {
+    for (const ext of ['', '.exe', '.cmd']) {
+      const p = path.join(d, n + ext);
+      if (fs.existsSync(p)) return p;
+    }
   }
   die(`binary ${BROWSER} tidak ketemu. Pakai --browser-path <exe>.`);
 }
 
 function resolveProfile() {
   if (arg('profile')) return path.resolve(String(arg('profile')));
-  if (isChromium) return path.join(os.homedir(), '.config/coarena-keys', BROWSER);
-  const ini = fs.readFileSync(path.join(ZEN, 'installs.ini'), 'utf8');
-  const def = ini.match(/^Default=(.+)$/m)?.[1];
-  if (!def) die('profil default Zen tidak ketemu. Pakai --profile <dir>.');
-  return path.join(ZEN, def);
-}
-
-function zenRunning() {
-  try { execSync('pgrep -x zen-bin', { stdio: 'ignore' }); return true; } catch { return false; }
+  if (isChromium) return path.join(getAppConfigDir(), BROWSER);
+  const zenDir = getZenDir();
+  const iniPath = path.join(zenDir, 'installs.ini');
+  if (fs.existsSync(iniPath)) {
+    const ini = fs.readFileSync(iniPath, 'utf8');
+    const def = ini.match(/^Default=(.+)$/m)?.[1];
+    if (def) return path.join(zenDir, def);
+  }
+  const profPath = path.join(zenDir, 'profiles.ini');
+  if (fs.existsSync(profPath)) {
+    const prof = fs.readFileSync(profPath, 'utf8');
+    const def = prof.match(/^Path=(.+)$/m)?.[1];
+    if (def) return path.join(zenDir, def);
+  }
+  die(`profil default Zen tidak ketemu di ${zenDir}. Pakai --profile <dir>.`);
 }
 
 // Puppeteer menulis pref ke user.js/prefs.js profil Firefox. Backup sendiri biar profil pasti balik utuh.
@@ -179,7 +332,8 @@ async function main() {
 
   if (!isChromium && zenRunning()) die('Zen masih jalan. Tutup dulu Zen-nya, lalu jalankan lagi.');
   if (isChromium && has('copy-default')) {
-    try { execSync('pgrep -x ' + path.basename(exe).replace(/-stable$/, ''), { stdio: 'ignore' }); die('Browser masih jalan. Tutup dulu, lalu jalankan lagi.'); } catch {}
+    const procNames = [path.basename(exe), 'chrome', 'msedge', 'brave', 'vivaldi'];
+    if (isProcessRunning(procNames)) die('Browser masih jalan. Tutup dulu, lalu jalankan lagi.');
     copyDefault(profile);
   }
   if (isChromium && !fs.existsSync(profile)) die(`profil ${profile} belum ada. Jalankan dulu: node getkeys.mjs --browser ${BROWSER} --setup`);
