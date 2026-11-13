@@ -1,22 +1,43 @@
 #!/usr/bin/env node
-// Ambil API key coarena.ai pakai Zen asli + profil asli yang sudah login Google.
-// Akun yang tidak login di Zen di-skip. Tidak ada cookie yang disalin atau disimpan.
+// Ambil API key coarena.ai pakai browser asli + profil yang sudah login Google.
+// Zen/Firefox: profil asli. Chromium family: profil khusus (Chrome 136+ blokir otomasi di profil utama).
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 
 const arg = (n, d = null) => { const i = process.argv.indexOf('--' + n); return i > 0 ? (process.argv[i + 1] ?? true) : d; };
 const has = n => process.argv.includes('--' + n);
 const OUT = String(arg('out', 'keys.csv'));
-const EXE = String(arg('browser-path', process.env.ZEN_PATH || '/opt/zen-browser-bin/zen-bin'));
+const BROWSER = String(arg('browser', 'zen'));
 const ZEN = path.join(os.homedir(), '.config/zen');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const die = m => { console.error('ERROR: ' + m); process.exit(1); };
 
+const CHROMIUM = {
+  chrome: ['google-chrome-stable', 'google-chrome'],
+  chromium: ['chromium', 'chromium-browser'],
+  brave: ['brave-browser', 'brave'],
+  edge: ['microsoft-edge-stable', 'microsoft-edge'],
+  vivaldi: ['vivaldi-stable', 'vivaldi'],
+};
+const isChromium = BROWSER in CHROMIUM;
+if (!isChromium && BROWSER !== 'zen' && BROWSER !== 'firefox') die('--browser harus zen, firefox, ' + Object.keys(CHROMIUM).join(', '));
+
+function findExe() {
+  if (arg('browser-path')) return String(arg('browser-path'));
+  if (!isChromium) return process.env.ZEN_PATH || '/opt/zen-browser-bin/zen-bin';
+  for (const n of CHROMIUM[BROWSER]) for (const d of (process.env.PATH || '').split(':')) {
+    const p = path.join(d, n);
+    if (fs.existsSync(p)) return p;
+  }
+  die(`binary ${BROWSER} tidak ketemu. Pakai --browser-path <exe>.`);
+}
+
 function resolveProfile() {
   if (arg('profile')) return path.resolve(String(arg('profile')));
+  if (isChromium) return path.join(os.homedir(), '.config/coarena-keys', BROWSER);
   const ini = fs.readFileSync(path.join(ZEN, 'installs.ini'), 'utf8');
   const def = ini.match(/^Default=(.+)$/m)?.[1];
   if (!def) die('profil default Zen tidak ketemu. Pakai --profile <dir>.');
@@ -27,8 +48,9 @@ function zenRunning() {
   try { execSync('pgrep -x zen-bin', { stdio: 'ignore' }); return true; } catch { return false; }
 }
 
-// Puppeteer menulis pref ke user.js/prefs.js profil. Backup sendiri biar profil pasti balik utuh.
+// Puppeteer menulis pref ke user.js/prefs.js profil Firefox. Backup sendiri biar profil pasti balik utuh.
 function guardProfile(profile) {
+  if (isChromium) return () => {};
   const files = ['user.js', 'prefs.js'].map(f => path.join(profile, f));
   const saved = files.map(f => fs.existsSync(f) ? fs.readFileSync(f) : null);
   return () => files.forEach((f, i) => saved[i] ? fs.writeFileSync(f, saved[i]) : fs.rmSync(f, { force: true }));
@@ -62,10 +84,10 @@ async function login(page, email) {
 
   if (page.url().includes('accounts.google.com')) {
     const pick = await page.$(`[data-identifier="${email}"]`) ?? await page.$(`::-p-text(${email})`);
-    if (!pick) return 'skip: tidak login di Zen';
+    if (!pick) return 'skip: tidak login di browser';
     await pick.click();
     await sleep(4000);
-    if (await page.$('input[type=password]')) return 'skip: signed out di Zen';
+    if (await page.$('input[type=password]')) return 'skip: signed out di browser';
   }
 
   for (let i = 0; i < 10 && !page.url().startsWith('https://coarena.ai'); i++) {
@@ -100,23 +122,47 @@ async function processAccount(page, email, tag) {
   return ok ? 'ok' : 'key invalid';
 }
 
+function launch(exe, profile) {
+  if (!isChromium) return puppeteer.launch({ browser: 'firefox', executablePath: exe, userDataDir: profile, headless: false, defaultViewport: null });
+  return puppeteer.launch({
+    browser: 'chrome', executablePath: exe, userDataDir: profile, headless: false, defaultViewport: null,
+    ignoreDefaultArgs: ['--enable-automation'], args: ['--disable-blink-features=AutomationControlled'],
+  });
+}
+
 async function main() {
+  const exe = findExe();
+  const profile = resolveProfile();
+
+  // Buka browser biasa (tanpa otomasi) di profil khusus supaya login Google tidak diblokir.
+  if (has('setup')) {
+    if (!isChromium) die('--setup hanya untuk Chromium family. Zen/Firefox pakai profil asli.');
+    fs.mkdirSync(profile, { recursive: true });
+    spawn(exe, ['--user-data-dir=' + profile, 'https://accounts.google.com'], { detached: true, stdio: 'ignore' }).unref();
+    console.log(`profil: ${profile}\nLogin semua akun Google di jendela itu, lalu TUTUP browsernya.`);
+    return;
+  }
+
   const emails = has('only')
     ? [String(arg('only'))]
     : fs.existsSync('accounts.txt')
       ? fs.readFileSync('accounts.txt', 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
       : die('buat accounts.txt (satu email per baris) atau pakai --only <email>');
 
-  if (zenRunning()) die('Zen masih jalan. Tutup dulu Zen-nya, lalu jalankan lagi.');
-  const profile = resolveProfile();
-  console.log(`profile=${profile}\nout=${OUT}\n`);
+  if (!isChromium && zenRunning()) die('Zen masih jalan. Tutup dulu Zen-nya, lalu jalankan lagi.');
+  if (isChromium && !fs.existsSync(profile)) die(`profil ${profile} belum ada. Jalankan dulu: node getkeys.mjs --browser ${BROWSER} --setup`);
+  console.log(`browser=${BROWSER}\nprofile=${profile}\nout=${OUT}\n`);
 
   const restore = guardProfile(profile);
   process.on('SIGINT', () => { restore(); process.exit(130); });
-  const browser = await puppeteer.launch({ browser: 'firefox', executablePath: EXE, userDataDir: profile, headless: false, defaultViewport: null });
+  const browser = await launch(exe, profile);
   const rows = [];
   try {
     const page = (await browser.pages())[0] ?? await browser.newPage();
+    await page.goto('https://coarena.ai/account/api');
+    const original = await emailOnPage(page);
+    if (original) console.log(`akun coarena aktif sekarang: ${original} (dikembalikan di akhir)\n`);
+
     for (let i = 0; i < emails.length; i++) {
       const email = emails[i];
       const tag = `[${i + 1}/${emails.length}] ${email}`;
@@ -124,12 +170,14 @@ async function main() {
         const res = await login(page, email);
         if (res !== 'ok') { console.log(`${tag}  ${res}`); rows.push([email, res]); continue; }
         rows.push([email, await processAccount(page, email, tag)]);
-        await coarenaLogout(page);
       } catch (e) {
         console.log(`${tag}  error: ${String(e.message).slice(0, 100)}`);
         rows.push([email, 'error']);
       }
     }
+
+    if (original) console.log(`\nbalik ke ${original}: ${await login(page, original).catch(e => 'error ' + e.message)}`);
+    else await coarenaLogout(page).catch(() => {});
   } finally {
     await browser.close().catch(() => {});
     restore();

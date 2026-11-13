@@ -32,8 +32,10 @@ node getkeys.mjs --print
 
 | Opsi | Keterangan |
 | --- | --- |
-| `--profile <dir>` | Folder profil Zen. Default: profil default di `~/.config/zen/installs.ini`. |
-| `--browser-path <exe>` | Binary Zen/Firefox. Bisa juga lewat env `ZEN_PATH`. |
+| `--browser <nama>` | `zen` (default), `firefox`, `chrome`, `chromium`, `brave`, `edge`, `vivaldi`. |
+| `--setup` | Chromium family: buka profil khusus untuk login Google manual. |
+| `--profile <dir>` | Folder profil. Default Zen: `~/.config/zen/installs.ini`. Default Chromium: `~/.config/coarena-keys/<browser>`. |
+| `--browser-path <exe>` | Path binary browser. Zen bisa juga lewat env `ZEN_PATH`. |
 | `--only <email>` | Proses satu akun saja. |
 | `--check` | Login dan cek jumlah key aktif, tanpa membuat key. |
 | `--force` | Buat key baru walau sudah punya key aktif (maksimal 10 per akun). |
@@ -58,5 +60,14 @@ Jangan commit `keys.csv` dan `accounts.txt` (sudah ada di `.gitignore`).
 
 - Memakai endpoint privat coarena, bukan API resmi. Bentuk respons bisa berubah kapan saja.
 - Batas per akun: 10 key aktif.
-- Chrome 136+ memblokir otomasi di profil default, jadi hanya Zen/Firefox yang didukung.
+- Akun coarena yang sedang login di browser dikembalikan di akhir, jadi tidak ke-logout.
+
+## Chromium family (Chrome, Brave, Edge, Chromium, Vivaldi)
+
+Chrome 136+ memblokir otomasi di profil utama, jadi pakai profil khusus (sekali setup):
+
+```bash
+node getkeys.mjs --browser brave --setup   # login semua akun Google, lalu tutup browsernya
+node getkeys.mjs --browser brave --print
+```
 - Riwayat kunjungan ke coarena ikut tercatat di Zen.
